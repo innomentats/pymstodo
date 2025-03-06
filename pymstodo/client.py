@@ -126,6 +126,33 @@ class TaskList:
 
 
 @dataclasses.dataclass
+class ChecklistItem:
+    '''**ChecklistItem** represents a subtask in a bigger todo task. ChecklistItem allows breaking down a complex task into more actionable, smaller tasks.'''
+
+    item_id: str
+    '''Server generated ID for the the checkListItem'''
+
+    displayName: str
+    '''Indicates the title of the checklistItem.'''
+
+    checkedDateTime: _DateTimeTimeZone
+    '''The date and time when the checklistItem was finished.'''
+
+    createdDateTime: _DateTimeTimeZone
+    '''The date and time when the checklistItem was created.'''
+
+    isChecked: bool
+    '''State that indicates whether the item is checked off or not.'''
+
+    def __init__(self, **kwargs: Any) -> None:
+        for f in dataclasses.fields(self):
+            setattr(self, f.name, kwargs.get('id' if f.name == 'item_id' else f.name))
+
+    def __str__(self) -> str:
+        return self.displayName.replace('|', '—').strip()
+
+
+@dataclasses.dataclass
 class Task:
     '''**To-Do task** represents a task, such as a piece of work or personal item, that can be tracked and completed'''
 
@@ -166,6 +193,9 @@ class Task:
 
     startDateTime: _DateTimeTimeZone
     '''The date and time in the specified time zone at which the task is scheduled to start. Uses ISO 8601 format'''
+
+    checklistItems: list[ChecklistItem]
+    '''A collection of ChecklistItems linked to a task.'''
 
     status: str
 
@@ -234,6 +264,11 @@ class Task:
         '''Indicates the state or progress of the task'''
         return TaskStatus(self.status)
 
+    @property
+    def checklist(self) -> list[ChecklistItem]:
+        '''Indicates the state or progress of the task'''
+        return self.checklistItems
+
 
 class ToDoConnection:
     '''**To-Do connection** is your entry point to the To-Do API
@@ -247,7 +282,7 @@ class ToDoConnection:
     _scope: str = 'openid offline_access Tasks.ReadWrite'
     _authority: str = 'https://login.microsoftonline.com/common'
     _authorize_endpoint: str = '/oauth2/v2.0/authorize'
-    _token_endpoint: str = '/oauth2/v2.0/token'
+    _token_endpoint: str = '/oauth2/v2.0/token'   # noqa: S105
     _base_api_url: str = 'https://graph.microsoft.com/v1.0/me/todo/'
 
     def __init__(self, client_id: str, client_secret: str, token: Token) -> None:
@@ -542,6 +577,143 @@ class ToDoConnection:
         Raises:
             PymstodoError: An error occurred accessing the API'''
         return self.update_task(task_id, list_id, status='completed')
+
+    def get_checklist(self, task_id: str, list_id: str) -> list[ChecklistItem]:
+        '''Get task's checklist by a specified task id
+
+        Args:
+            tast_id: Unique identifier for the task
+            list_id: Unique identifier for the task list
+
+        Returns:
+            Checklist of a specified task, in form of list[ChecklistItem]
+
+        Raises:
+            PymstodoError: An error occurred accessing the API
+        '''
+        self._refresh_token()
+        oa_sess = OAuth2Session(self.client_id, scope=ToDoConnection._scope, token=self.token)
+        url = f'{ToDoConnection._base_api_url}lists/{list_id}/tasks/{task_id}/checklistItems'
+        resp = oa_sess.get(url)
+        if not resp.ok:
+            raise PymstodoError(resp.status_code, resp.reason)
+
+        contents = json.loads(resp.content.decode())['value']
+        return [ChecklistItem(**item_data) for item_data in contents]
+
+    def create_checklist_item(self, display_name: str, task_id: str, list_id: str) -> ChecklistItem:
+        '''Create a new checklist item for a specified task
+
+        Args:
+            display_name: A brief description of the checklist item
+            task_id: Unique identifier for the task
+            list_id: Unique identifier for the task list
+
+        Returns:
+            A created checklist item
+
+        Raises:
+            PymstodoError: An error occurred accessing the API'''
+        self._refresh_token()
+        oa_sess = OAuth2Session(self.client_id, scope=ToDoConnection._scope, token=self.token)
+        item_data: dict[str, Any] = {
+            'displayName': display_name,
+            'isChecked': False,
+        }
+        url = f'{ToDoConnection._base_api_url}lists/{list_id}/tasks/{task_id}/checklistItems'
+        resp = oa_sess.post(url, json=item_data)
+        if not resp.ok:
+            raise PymstodoError(resp.status_code, resp.reason)
+
+        contents = json.loads(resp.content.decode())
+
+        return ChecklistItem(**contents)
+
+    def get_checklist_item(self, item_id: str, task_id: str, list_id: str) -> ChecklistItem:
+        '''Read the properties of a checklist item
+
+        Args:
+            item_id: Unique identifier for the checklist item
+            task_id: Unique identifier for the task
+            list_id: Unique identifier for the task list
+
+        Returns:
+            A checklist item object
+
+        Raises:
+            PymstodoError: An error occurred accessing the API'''
+        self._refresh_token()
+        oa_sess = OAuth2Session(self.client_id, scope=ToDoConnection._scope, token=self.token)
+        url = f'{ToDoConnection._base_api_url}lists/{list_id}/tasks/{task_id}/checklistItems/{item_id}'
+        resp = oa_sess.get(url)
+        if not resp.ok:
+            raise PymstodoError(resp.status_code, resp.reason)
+
+        contents = json.loads(resp.content.decode())
+
+        return ChecklistItem(**contents)
+
+    def update_checklist_item(self, item_id: str, task_id: str, list_id: str, **item_data: str | bool) -> ChecklistItem:
+        '''Update the properties of a checklist item
+
+        Args:
+            item_id: Unique identifier for the checklist item
+            task_id: Unique identifier for the task
+            list_id: Unique identifier for the task list
+            item_data: Task properties from `ChecklistItem` object
+
+        Returns:
+            An updated checklist item
+
+        Raises:
+            PymstodoError: An error occurred accessing the API'''
+        self._refresh_token()
+        oa_sess = OAuth2Session(self.client_id, scope=ToDoConnection._scope, token=self.token)
+        url = f'{ToDoConnection._base_api_url}lists/{list_id}/tasks/{task_id}/checklistItems/{item_id}'
+        resp = oa_sess.patch(url, json=item_data)
+        if not resp.ok:
+            raise PymstodoError(resp.status_code, resp.reason)
+
+        contents = json.loads(resp.content.decode())
+
+        return ChecklistItem(**contents)
+
+    def delete_checklist_item(self, item_id: str, task_id: str, list_id: str) -> bool:
+        '''Delete a checklist item
+
+        Args:
+            item_id: Unique identifier for the checklist item
+            task_id: Unique identifier for the task
+            list_id: Unique identifier for the task list
+
+        Returns:
+            `True` if success
+
+        Raises:
+            PymstodoError: An error occurred accessing the API'''
+        self._refresh_token()
+        oa_sess = OAuth2Session(self.client_id, scope=ToDoConnection._scope, token=self.token)
+        url = f'{ToDoConnection._base_api_url}lists/{list_id}/tasks/{task_id}/checklistItems/{item_id}'
+        resp = oa_sess.delete(url)
+        if not resp.ok:
+            raise PymstodoError(resp.status_code, resp.reason)
+
+        return True
+
+    def complete_checklist_item(self, item_id: str, task_id: str, list_id: str) -> ChecklistItem:
+        '''Complete a checklsit item
+
+        Args:
+            item_id: Unique identifier for the checklist item
+            task_id: Unique identifier for the task
+            list_id: Unique identifier for the task list
+
+        Returns:
+            A completed checklist item
+
+        Raises:
+            PymstodoError: An error occurred accessing the API'''
+        return self.update_checklist_item(item_id, task_id, list_id, isChecked=True)
 
 
 os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'  # noqa: S105

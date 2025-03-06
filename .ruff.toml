@@ -140,7 +140,7 @@ lines-after-imports = 2
 max-complexity = 15
 
 [lint.pep8-naming]
-extend-ignore-names = ["displayName", "isOwner", "isShared", "wellknownListName", "completedDateTime", "createdDateTime", "dueDateTime", "hasAttachments", "isReminderOn", "lastModifiedDateTime", "reminderDateTime", "startDateTime"]
+extend-ignore-names = ["displayName", "isOwner", "isShared", "wellknownListName", "completedDateTime", "createdDateTime", "dueDateTime", "hasAttachments", "isReminderOn", "lastModifiedDateTime", "reminderDateTime", "startDateTime", "checklistItems", "checkedDateTime", "isChecked"]
 
 [lint.flake8-quotes]
 docstring-quotes = "single"
